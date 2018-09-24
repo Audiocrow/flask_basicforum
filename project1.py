@@ -9,12 +9,19 @@ import sqlite3
 app = Flask(__name__)
 app.config["DEBUG"] = True
 
-#sqlite3 database setup code provided by official Flask documentation:
 DATABASE = 'database.db'
+
+#make_dicts from http://flask.pocoo.org/docs/1.0/patterns/sqlite3/#initial-schemas
+def make_dicts(cursor, row):
+    return dict((cursor.description[idx][0], value) for idx, value in \
+        enumerate(row))
+
+#sqlite3 database setup code provided by official Flask documentation:
 def get_db():
     db = getattr(g, '_database', None)
     if db is None:
         db = g._database = sqlite3.connect(DATABASE)
+        db.row_factory = make_dicts
     return db
 
 @app.teardown_appcontext
@@ -22,6 +29,17 @@ def close_connection(exception):
     db = getattr(g, '_database', None)
     if db is not None:
         db.close()
+
+#query_db from http://flask.pocoo.org/docs/1.0/patterns/sqlite3/#initial-schemas
+def query_db(query, args=(), one=False):
+    try:
+        cur = get_db().execute(query, args)
+        rv = cur.fetchall()
+        cur.close()
+        return (rv[0] if rv else None) if one else rv
+    except:
+        if one: return None
+        else: return []
 
 @app.cli.command()
 def init_db():
@@ -33,21 +51,6 @@ def init_db():
             db.cursor().executescript(f.read())
         db.commit()
 
-def select_dicts(query : str, params=None) -> list:
-    '''Queries the database with the given SELECT statement and zips the column
-        names together with the results, then returns a list
-        of column_name:value rows'''
-    try:
-        db = get_db()
-        cursor = db.cursor()
-        rows = cursor.execute(query, params).fetchall() if params\
-            else cursor.execute(query)
-        return [dict(zip([colname[0] for colname in cursor.description], row)) \
-            for row in rows]
-    except sqlite3.Error as e:
-        print(e)
-        return []
-
 class BasicDBAuth(BasicAuth):
     def check_credentials(username, password):
         # TODO: check with db to see if valid
@@ -58,7 +61,7 @@ basic_auth = BasicDBAuth(app)
 @app.route("/forums", methods=['GET'])
 def view_forums():
     #Returns a list of forums
-    return jsonify(select_dicts("SELECT * FROM forums;"))
+    return jsonify(query_db("SELECT * FROM forums;"))
 
 @app.route("/forums", methods=['POST'])
 @basic_auth.required
@@ -71,6 +74,12 @@ def create_forum():
 @app.route("/forums/<int:forum_id>")
 def view_threads():
     # TODO
+    return
+
+@app.route("/users", methods=['POST'])
+def create_user():
+    '''Creates a user in the database and returns either HTTP 201 Created
+        or HTTP 409 Conflict if the user already exists'''
     return
 
 if __name__ == "__main__":
