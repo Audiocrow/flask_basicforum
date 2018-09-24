@@ -72,10 +72,20 @@ def view_forums():
 @app.route("/forums", methods=['POST'])
 @basic_auth.required
 def create_forum():
-    # TODO: request name, creator; return HTTP 201 Created or HTTP 409 Conflict
-    # Set location header field to /forums/<forum_id> for new
-    print("Hello %s" % basic_auth.username())
-    return
+    input = request.get_json()
+    name = input["name"]
+    duplicate_check = query_db("SELECT name FROM forums WHERE name=?", [name])
+    if duplicate_check:
+        return jsonify("Forum already exists"), "409 CONFLICT"
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("INSERT INTO forums (name, creator) VALUES (?,?)", [name, request.authorization["username"]])
+    forum = cursor.lastrowid
+    db.commit()
+    response = jsonify()
+    response.status_code = 201
+    response.headers['location'] = '/forums/%d' %(forum)
+    return response
 
 @app.route("/forums/<int:forum_id>")
 def view_threads():
