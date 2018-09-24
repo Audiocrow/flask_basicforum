@@ -58,9 +58,9 @@ def init_db():
         db.commit()
 
 class BasicDBAuth(BasicAuth):
-    def check_credentials(username, password):
-        # TODO: check with db to see if valid
-        return False
+    def check_credentials(self, username, password):
+        check = query_db("SELECT username FROM users WHERE username=? AND password=?", [username, password])
+        return (check != [])
 
 basic_auth = BasicDBAuth(app)
 
@@ -97,6 +97,22 @@ def create_user():
     insert_db("INSERT INTO users VALUES (?,?);", (user,pw))
     #TODO: fix returning HTTP 201 CREATED even on exception
     return jsonify("HTTP 201 CREATED"), "201 CREATED"
+
+@app.route("/users/<username>", methods=['PUT'])
+@basic_auth.required
+def change_pw(username):
+    '''Changes the password of a user Returns HTTP 404 if the provided username
+        does not exist, HTTP 409 if the username does not match the current
+        authenticated user, and HTTP 200 if OK.'''
+    input = request.get_json()
+    pw = input['password']
+    user_check = query_db("SELECT username FROM users WHERE username=?", [username])
+    if not user_check:
+        return jsonify("User does not exist"), "404 NOT FOUND"
+    if username != request.authorization["username"]:
+        return jsonify("Username does not match current user"), "409 CONFLICT"
+    insert_db("UPDATE users SET password=? WHERE username=?", [pw, username])
+    return "", "200 OK"
 
 if __name__ == "__main__":
     app.run()
