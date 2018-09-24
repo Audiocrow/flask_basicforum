@@ -33,13 +33,19 @@ def close_connection(exception):
 #query_db from http://flask.pocoo.org/docs/1.0/patterns/sqlite3/#initial-schemas
 def query_db(query, args=(), one=False):
     try:
-        cur = get_db().execute(query, args)
-        rv = cur.fetchall()
-        cur.close()
-        return (rv[0] if rv else None) if one else rv
-    except:
+        res=get_db().execute(query, args).fetchall()
+        return (res[0] if res else None) if one else res
+    except sqlite3.Error as e:
+        print('EXCEPTION AT query_db:%s' %(e))
         if one: return None
         else: return []
+def insert_db(query, args=()):
+    try:
+        cursor = get_db().cursor()
+        cursor.execute(query, args)
+        get_db().commit()
+    except sqlite3.Error as e:
+        print('EXCEPTION AT insert_db:%s' %(e))
 
 @app.cli.command()
 def init_db():
@@ -78,9 +84,19 @@ def view_threads():
 
 @app.route("/users", methods=['POST'])
 def create_user():
-    '''Creates a user in the database and returns either HTTP 201 Created
-        or HTTP 409 Conflict if the user already exists'''
-    return
+    '''Creates a user in the database and returns either HTTP 201 Created,
+        HTTP 400 if data was not provided, or HTTP 409 Conflict if the user
+        already exists'''
+    input = request.get_json()
+    if not input or 'username' not in input or 'password' not in input:
+        return jsonify("Must provide username and password"), "400 BAD REQUEST"
+    user = input['username']
+    pw = input['password']
+    user_check = query_db("SELECT username FROM users WHERE username=?", [user])
+    if user_check: return jsonify("User already exists"), "409 CONFLICT"
+    insert_db("INSERT INTO users VALUES (?,?);", (user,pw))
+    #TODO: fix returning HTTP 201 CREATED even on exception
+    return jsonify("HTTP 201 CREATED"), "201 CREATED"
 
 if __name__ == "__main__":
     app.run()
