@@ -1,4 +1,5 @@
-from flask import g, jsonify, request
+import click
+from flask import Flask, g, jsonify, request
 from flask_basicauth import BasicAuth
 import sqlite3
 
@@ -20,6 +21,7 @@ def close_connection(exception):
         db.close()
 
 #Add a custom command to Flask to initialize the db
+#Only run this once to populate the default database
 @app.cli.command()
 def init_db():
     #Code provided by official Flask documentation:
@@ -37,18 +39,28 @@ class BasicDBAuth(BasicAuth):
 basic_auth = BasicDBAuth(app)
 
 @app.route("/forums", methods=['GET'])
-def view_forums:
-    # TODO: return id, name, creator, HTTP 200 OK
-    return
+def view_forums():
+    #Returns a list of forums
+    try:
+        db = get_db()
+        cur = db.cursor()
+        forums = cur.execute("SELECT * FROM forums;").fetchall()
+        print(forums)
+        return jsonify(forums)
+    except:
+        return jsonify([])
 
 @app.route("/forums", methods=['POST'])
 @basic_auth.required
-def create_forum:
+def create_forum():
     # TODO: request name, creator; return HTTP 201 Created or HTTP 409 Conflict
     # Set location header field to /forums/<forum_id> for new
     return
 
 @app.route("/forums/<int:forum_id>")
-def view_threads:
+def view_threads():
     # TODO
     return
+
+if __name__ == "__main__":
+    app.run()
