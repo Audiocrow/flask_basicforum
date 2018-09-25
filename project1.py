@@ -91,14 +91,41 @@ def create_forum():
     return response
 
 @app.route("/forums/<int:forum_id>")
-def view_threads(forum_id):
-    threads = query_db("SELECT (id,creator,title,timestamp) FROM threads WHERE forum=?", [forum_id])
-    print(threads)
+def view_threads(forum_id, methods=['GET']):
+    #View the list of threads in a forum. Returns 200 OK or 404 NOT FOUND
+    threads = query_db("SELECT id,creator,title,timestamp FROM threads WHERE forum=?", [forum_id])
+    if len(threads) < 1:
+        return jsonify("HTTP 404 NOT FOUND"), "404 NOT FOUND"
     if len(threads) > 1:
         #Sort threads in reverse chronological order
         threads.sort(key=lambda k: time.strptime(k["timestamp"], \
         "%a, %d %b %Y %H:%M:%S %Z"), reverse=False)
     return jsonify(threads)
+
+@app.route("/forums/<int:forum_id>", methods=['POST'])
+@basic_auth.required
+def post_thread(forum_id):
+    #Posts a new thread to a forum
+    #Returns the new location header and 201 CREATED, 404 NOT FOUND, or
+    #400 BAD REQUEST if data was not provided
+    forum = query_db("SELECT name FROM forums WHERE id=?", [forum_id], True)
+    if not forum:
+        return jsonify("HTTP 404 NOT FOUND"), "404 NOT FOUND"
+    input = request.get_json()
+    if not input or 'title' not in input or 'text' not in input:
+        return jsonify("Must provide title and text"), "400 BAD REQUEST"
+    db = get_db()
+    cursor = db.cursor()
+    #Note: does not check for duplicates
+    cursor.execute("INSERT INTO threads (forum,title,creator,text,timestamp) VALUES(?,?,?,?,?)", [forum_id, input['title'], \
+     request.authorization["username"], input['text'], \
+     time.strftime("%a, %d %b %Y %H:%M:%S %Z", time.gmtime())])
+    thread = cursor.lastrowid
+    db.commit()
+    response = jsonify(input['text'])
+    response.status_code = 201
+    response.headers['location'] = '/forums/%d/%d' %(forum_id, thread)
+    return response
 
 @app.route("/users", methods=['POST'])
 def create_user():
