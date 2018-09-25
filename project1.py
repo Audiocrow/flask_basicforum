@@ -96,7 +96,7 @@ def view_threads(forum_id, methods=['GET']):
     threads = query_db("SELECT id,creator,title,timestamp FROM threads WHERE forum=?", [forum_id])
     if len(threads) < 1:
         return jsonify("HTTP 404 NOT FOUND"), "404 NOT FOUND"
-    if len(threads) > 1:
+    elif len(threads) > 1:
         #Sort threads in reverse chronological order
         threads.sort(key=lambda k: time.strptime(k["timestamp"], \
         "%a, %d %b %Y %H:%M:%S %Z"), reverse=False)
@@ -117,15 +117,30 @@ def post_thread(forum_id):
     db = get_db()
     cursor = db.cursor()
     #Note: does not check for duplicates
-    cursor.execute("INSERT INTO threads (forum,title,creator,text,timestamp) VALUES(?,?,?,?,?)", [forum_id, input['title'], \
-     request.authorization["username"], input['text'], \
-     time.strftime("%a, %d %b %Y %H:%M:%S %Z", time.gmtime())])
+    timestamp = time.strftime("%a, %d %b %Y %H:%M:%S %Z", time.gmtime())
+    cursor.execute("INSERT INTO threads (forum,title,creator,timestamp) \
+    VALUES(?,?,?,?)", [forum_id, input['title'], request.authorization["username"], \
+    timestamp])
     thread = cursor.lastrowid
+    cursor.execute("INSERT INTO posts (thread,author,text,timestamp) VALUES(?,?,?,?)", \
+        [thread, request.authorization["username"], input["text"], timestamp])
     db.commit()
     response = jsonify(input['text'])
     response.status_code = 201
     response.headers['location'] = '/forums/%d/%d' %(forum_id, thread)
     return response
+
+@app.route("/forums/<int:forum_id>/<int:thread_id>")
+def view_thread(forum_id, thread_id):
+    #Views posts in a thread on the forum
+    #My implementation of posts in the db has them assigned to just a post id, so
+    #forum_id isn't stricly necessary here
+    posts = query_db("SELECT author,text,timestamp FROM posts WHERE thread=?", [thread_id])
+    if len(posts) < 1:
+        return jsonify("Thread does not exist"), "404 NOT FOUND"
+    elif len(posts) > 1:
+        posts.sort(key=lambda k: k["timestamp"])
+    return jsonify(posts)
 
 @app.route("/users", methods=['POST'])
 def create_user():
