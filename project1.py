@@ -90,21 +90,22 @@ def create_forum():
     response.headers['location'] = '/forums/%d' %(forum)
     return response
 
-@app.route("/forums/<int:forum_id>")
-def view_threads(forum_id, methods=['GET']):
+@app.route("/forums/<int:forum_id>", methods=['GET'])
+def view_threads(forum_id):
     #View the list of threads in a forum. Returns 200 OK or 404 NOT FOUND
+    forum_check = query_db("SELECT * FROM forums;")
+    if len(forum_check) < 1:
+        return jsonify("No such forum"), "404 NOT FOUND"
     threads = query_db("SELECT id,creator,title,timestamp FROM threads WHERE forum=?", [forum_id])
-    if len(threads) < 1:
-        return jsonify("HTTP 404 NOT FOUND"), "404 NOT FOUND"
-    elif len(threads) > 1:
+    if len(threads) > 1:
         #Sort threads in reverse chronological order
         threads.sort(key=lambda k: time.strptime(k["timestamp"], \
-        "%a, %d %b %Y %H:%M:%S %Z"), reverse=False)
+        "%a, %d %b %Y %H:%M:%S %Z"), reverse=True)
     return jsonify(threads)
 
 @app.route("/forums/<int:forum_id>", methods=['POST'])
 @basic_auth.required
-def post_thread(forum_id):
+def create_thread(forum_id):
     #Posts a new thread to a forum
     #Returns the new location header and 201 CREATED, 404 NOT FOUND, or
     #400 BAD REQUEST if data was not provided
@@ -120,7 +121,7 @@ def post_thread(forum_id):
     timestamp = time.strftime("%a, %d %b %Y %H:%M:%S %Z", time.gmtime())
     cursor.execute("INSERT INTO threads (forum,title,creator,timestamp) \
     VALUES(?,?,?,?)", [forum_id, input['title'], request.authorization["username"], \
-    timestamp])
+        timestamp])
     thread = cursor.lastrowid
     cursor.execute("INSERT INTO posts (thread,author,text,timestamp) VALUES(?,?,?,?)", \
         [thread, request.authorization["username"], input["text"], timestamp])
@@ -130,8 +131,8 @@ def post_thread(forum_id):
     response.headers['location'] = '/forums/%d/%d' %(forum_id, thread)
     return response
 
-@app.route("/forums/<int:forum_id>/<int:thread_id>")
-def view_thread(forum_id, thread_id):
+@app.route("/forums/<int:forum_id>/<int:thread_id>", methods=['GET'])
+def view_posts(forum_id, thread_id):
     #Views posts in a thread on the forum
     #My implementation of posts in the db has them assigned to just a post id, so
     #forum_id isn't stricly necessary here
@@ -141,6 +142,21 @@ def view_thread(forum_id, thread_id):
     elif len(posts) > 1:
         posts.sort(key=lambda k: k["timestamp"])
     return jsonify(posts)
+
+@app.route("/forums/<int:forum_id>/<int:thread_id>", methods=['POST'])
+@basic_auth.required
+def create_post(forum_id, thread_id):
+    #Post a new post in the specified thread
+    thread = query_db("SELECT id FROM threads WHERE id=?", [thread_id])
+    if len(thread) < 1:
+        return jsonify("Thread does not exist"), "404 NOT FOUND"
+    input = request.get_json()
+    if not input or 'text' not in input:
+        return jsonify("Must provide text to post"), "400 BAD REQUEST"
+    insert_db("INSERT INTO posts (thread,author,text,timestamp) VALUES(?,?,?,?)", \
+        [thread_id, request.authorization["username"], input["text"], \
+        time.strftime("%a, %d %b %Y %H:%M:%S %Z", time.gmtime())])
+    return jsonify(), "201 CREATED"
 
 @app.route("/users", methods=['POST'])
 def create_user():

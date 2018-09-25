@@ -27,7 +27,8 @@ CREATE TABLE if NOT EXISTS posts (
 );
 CREATE INDEX idx_posts ON posts(author);
 INSERT INTO posts VALUES (1, 1, 'bob', 'bob placeholder text', 'Wed, 05 Sep 2018 16:22:29 GMT');
-INSERT INTO posts VALUES (2, 2, 'charlie', 'charlie placeholder text', 'Tue, 04 Sep 2018 13:18:43 GMT');
+INSERT INTO posts VALUES (2, 1, 'alice', 'snarky alice response', 'Wed, 05 Sep 2018 16:34:46');
+INSERT INTO posts VALUES (3, 2, 'charlie', 'charlie placeholder text', 'Tue, 04 Sep 2018 13:18:43 GMT');
 CREATE TABLE if NOT EXISTS users (
     username TEXT PRIMARY KEY,
     password TEXT
