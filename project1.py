@@ -4,7 +4,9 @@
 import click
 from flask import Flask, g, jsonify, request
 from flask_basicauth import BasicAuth
+import random
 import sqlite3
+import time
 
 app = Flask(__name__)
 app.config["DEBUG"] = True
@@ -39,6 +41,7 @@ def query_db(query, args=(), one=False):
         print('EXCEPTION AT query_db:%s' %(e))
         if one: return None
         else: return []
+
 def insert_db(query, args=()):
     try:
         cursor = get_db().cursor()
@@ -88,9 +91,14 @@ def create_forum():
     return response
 
 @app.route("/forums/<int:forum_id>")
-def view_threads():
-    # TODO
-    return
+def view_threads(forum_id):
+    threads = query_db("SELECT (id,creator,title,timestamp) FROM threads WHERE forum=?", [forum_id])
+    print(threads)
+    if len(threads) > 1:
+        #Sort threads in reverse chronological order
+        threads.sort(key=lambda k: time.strptime(k["timestamp"], \
+        "%a, %d %b %Y %H:%M:%S %Z"), reverse=False)
+    return jsonify(threads)
 
 @app.route("/users", methods=['POST'])
 def create_user():
