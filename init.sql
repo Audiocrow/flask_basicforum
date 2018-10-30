@@ -14,21 +14,10 @@ CREATE TABLE if NOT EXISTS threads (
     timestamp TEXT,
     FOREIGN KEY(forum) REFERENCES forums(id)
 );
-CREATE INDEX idx_threads ON threads(forum, title, creator);
+CREATE INDEX idx_threads ON threads(forum, creator);
 INSERT INTO threads VALUES (1, 1, 'Does anyone know how to start Redis?', 'bob', 'Wed, 05 Sep 2018 16:22:29 GMT');
 INSERT INTO threads VALUES (2, 1, 'Has anyone heard of Edis?', 'charlie', 'Tue, 04 Sep 2018 13:18:43 GMT');
-CREATE TABLE if NOT EXISTS posts (
-    id INTEGER PRIMARY KEY,
-    thread INTEGER,
-    author TEXT,
-    text TEXT,
-    timestamp TEXT,
-    FOREIGN KEY(thread) REFERENCES threads(id)
-);
-CREATE INDEX idx_posts ON posts(author);
-INSERT INTO posts VALUES (1, 1, 'bob', 'bob placeholder text', 'Wed, 05 Sep 2018 16:22:29 GMT');
-INSERT INTO posts VALUES (2, 1, 'alice', 'snarky alice response', 'Wed, 05 Sep 2018 16:34:46');
-INSERT INTO posts VALUES (3, 2, 'charlie', 'charlie placeholder text', 'Tue, 04 Sep 2018 13:18:43 GMT');
+INSERT INTO threads VALUES (3, 2, 'MongoDB test thread', 'adam', 'Fri, 25 Oct 2018 17:00:15 GMT');
 CREATE TABLE if NOT EXISTS users (
     username TEXT PRIMARY KEY,
     password TEXT

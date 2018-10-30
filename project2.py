@@ -11,7 +11,7 @@ import time
 app = Flask(__name__)
 app.config["DEBUG"] = True
 
-DATABASE = 'database.db'
+DATABASE = 'database'
 
 #make_dicts from http://flask.pocoo.org/docs/1.0/patterns/sqlite3/#initial-schemas
 def make_dicts(cursor, row):
@@ -19,10 +19,10 @@ def make_dicts(cursor, row):
         enumerate(row))
 
 #sqlite3 database setup code provided by official Flask documentation:
-def get_db():
+def get_db(shard=None):
     db = getattr(g, '_database', None)
     if db is None:
-        db = g._database = sqlite3.connect(DATABASE)
+        db = g._database = sqlite3.connect(DATABASE + (str(shard) if shard is not None else "") + '.db')
         db.row_factory = make_dicts
     return db
 
@@ -59,6 +59,15 @@ def init_db():
         with app.open_resource('init.sql', mode='r') as f:
             db.cursor().executescript(f.read())
         db.commit()
+        db.close()
+        setattr(g, '_database', None)
+        for shard in range(0,3):
+            db = get_db(shard)
+            with app.open_resource('init'+str(shard)+'.sql', mode='r') as f:
+                db.cursor().executescript(f.read())
+            db.commit()
+            db.close()
+            setattr(g, '_database', None)
 
 class BasicDBAuth(BasicAuth):
     def check_credentials(self, username, password):
