@@ -96,7 +96,7 @@ def view_threads(forum_id):
     forum_check = query_db("SELECT * FROM forums;")
     if len(forum_check) < 1:
         return jsonify("No such forum"), "404 NOT FOUND"
-    threads = query_db("SELECT id,creator,title,timestamp FROM threads WHERE forum=?", [forum_id])
+    threads = query_db("SELECT id,title,creator,timestamp FROM threads WHERE forum=?", [forum_id])
     if len(threads) > 1:
         #Sort threads in reverse chronological order
         threads.sort(key=lambda k: time.strptime(k["timestamp"], \
@@ -112,6 +112,7 @@ def create_thread(forum_id):
     forum = query_db("SELECT name FROM forums WHERE id=?", [forum_id], True)
     if not forum:
         return jsonify("HTTP 404 NOT FOUND"), "404 NOT FOUND"
+    thread_id = query_db("SELECT COALESCE(MAX(id), 0) AS new_id FROM threads WHERE forum=?", [forum_id], True)['new_id']+1
     input = request.get_json()
     if not input or 'title' not in input or 'text' not in input:
         return jsonify("Must provide title and text"), "400 BAD REQUEST"
@@ -119,26 +120,23 @@ def create_thread(forum_id):
     cursor = db.cursor()
     #Note: does not check for duplicates
     timestamp = time.strftime("%a, %d %b %Y %H:%M:%S %Z", time.gmtime())
-    cursor.execute("INSERT INTO threads (forum,title,creator,timestamp) \
-    VALUES(?,?,?,?)", [forum_id, input['title'], request.authorization["username"], \
+    cursor.execute("INSERT INTO threads (id,forum,title,creator,timestamp) \
+    VALUES(?,?,?,?,?)", [thread_id, forum_id, input['title'], request.authorization["username"], \
         timestamp])
-    thread = cursor.lastrowid
-    cursor.execute("INSERT INTO posts (thread,author,text,timestamp) VALUES(?,?,?,?)", \
-        [thread, request.authorization["username"], input["text"], timestamp])
+    cursor.execute("INSERT INTO posts (thread,forum,author,text,timestamp) VALUES(?,?,?,?,?)", \
+        [thread_id, forum_id, request.authorization["username"], input["text"], timestamp])
     db.commit()
     response = jsonify(input['text'])
     response.status_code = 201
-    response.headers['location'] = '/forums/%d/%d' %(forum_id, thread)
+    response.headers['location'] = '/forums/%d/%d' %(forum_id, thread_id)
     return response
 
 @app.route("/forums/<int:forum_id>/<int:thread_id>", methods=['GET'])
 def view_posts(forum_id, thread_id):
     #Views posts in a thread on the forum
-    #My implementation of posts in the db has them assigned to just a post id, so
-    #forum_id isn't stricly necessary here
-    posts = query_db("SELECT author,text,timestamp FROM posts WHERE thread=?", [thread_id])
+    posts = query_db("SELECT author,text,timestamp FROM posts WHERE thread=? AND forum=?", [thread_id, forum_id])
     if len(posts) < 1:
-        return jsonify("Thread does not exist"), "404 NOT FOUND"
+        return jsonify("Thread or forum does not exist"), "404 NOT FOUND"
     elif len(posts) > 1:
         posts.sort(key=lambda k: k["timestamp"])
     return jsonify(posts)
@@ -153,9 +151,11 @@ def create_post(forum_id, thread_id):
     input = request.get_json()
     if not input or 'text' not in input:
         return jsonify("Must provide text to post"), "400 BAD REQUEST"
-    insert_db("INSERT INTO posts (thread,author,text,timestamp) VALUES(?,?,?,?)", \
-        [thread_id, request.authorization["username"], input["text"], \
-        time.strftime("%a, %d %b %Y %H:%M:%S %Z", time.gmtime())])
+    timestamp = time.strftime("%a, %d %b %Y %H:%M:%S %Z", time.gmtime())
+    insert_db("INSERT INTO posts (thread,forum,author,text,timestamp) VALUES(?,?,?,?,?)", \
+        [thread_id, forum_id, request.authorization["username"], input["text"], \
+        timestamp])
+    insert_db("UPDATE threads SET timestamp=? WHERE id=? AND forum=?", [timestamp, thread_id, forum_id])
     return jsonify(), "201 CREATED"
 
 @app.route("/users", methods=['POST'])
