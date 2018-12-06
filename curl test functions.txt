@@ -4,6 +4,9 @@ curl -v -H "Content-Type:application/json" -X POST -d '{"title":"test mongodb po
 curl -v -H "Content-Type:application/json" -X POST -d '{"title":"TEST2 in mongodb forum", "text":"test2 text in mongodb forum"}' -u adam:apple http://127.0.0.1:5000/forums/2
 curl -v -H "Content-Type:application/json" -X POST -d '{"text":"adam test mongodb followup text"}' -u adam:apple http://127.0.0.1:5000/forums/2/1
 
-----------------shard version with guids---------------------------------------
-curl -v http://127.0.0.1:5000/forums/3/204972913481120868907594661788859592267
+----------------version with guids---------------------------------------
+curl -v -H "Content-Type:application/json" -X POST -d '{"name":"Cassandra"}' -u adam:apple http://127.0.0.1:5000/forums
+curl -v http://127.0.0.1:5000/forums/0efa6dd7-c1f3-4e17-832a-4e3471db849f
+curl -v http://127.0.0.1:5000/forums/0efa6dd7-c1f3-4e17-832a-4e3471db849f
+curl -v -H "Content-Type:application/json" -X POST -d '{"text":"adam test followup text"}' -u adam:apple http://127.0.0.1:5000/forums
 curl -v -H "Content-Type:application/json" -X POST -d '{"text":"adam test followup text"}' -u adam:apple http://127.0.0.1:5000/forums/3/204972913481120868907594661788859592267

@@ -14,10 +14,18 @@ app.config["DEBUG"] = True
 KEYSPACE = 'bbs'
 CLUSTER_IP = '172.17.0.2'
 
+class Post(dict):
+    def __init__(self, author, text, timestamp):
+        dict.__init__(self, author=author, text=text, timestamp=timestamp)
+
 def get_db(Keyspace=KEYSPACE):
     db = getattr(g, '_database', None)
     if db is None:
-        db = g._database = Cluster([CLUSTER_IP]).connect(Keyspace)
+        cluster = getattr(g, '_cluster', None)
+        if cluster is None:
+            cluster = g._cluster = Cluster([CLUSTER_IP])
+            cluster.register_user_type(Keyspace, 'post', Post)
+        db = g._database = cluster.connect(Keyspace)
         db.row_factory = dict_factory
     return db
 
@@ -50,8 +58,8 @@ def init_db():
             for command in f.read().split(';'):
                 if len(command)>1:
                     db.execute(command)
-        redis_forum = uuid.uuid4().int
-        mongodb_forum = uuid.uuid4().int
+        redis_forum = uuid.uuid4()
+        mongodb_forum = uuid.uuid4()
         db.execute("INSERT INTO forums (id,name,creator) VALUES (%s,'redis', 'alice');", [redis_forum])
         db.execute("INSERT INTO forums (id,name,creator) VALUES (%s,'mongodb', 'bob');", [mongodb_forum])
         db.execute("""INSERT INTO threads (id,forum,title,creator,timestamp,posts) VALUES (%s, %s, 'Does anyone know how to start Redis?', 'bob',
@@ -63,7 +71,7 @@ def init_db():
 
 class BasicDBAuth(BasicAuth):
     def check_credentials(self, username, password):
-        check = query_db("SELECT username FROM users WHERE username=? AND password=?", [username, password])
+        check = query_db("SELECT username FROM users WHERE username=%s AND password=%s", [username, password])
         return (check != [])
 
 basic_auth = BasicDBAuth(app)
@@ -76,21 +84,17 @@ def view_forums():
 @app.route("/forums", methods=['POST'])
 @basic_auth.required
 def create_forum():
+    #Create a forum - does not check for name duplicates
     input = request.get_json()
     name = input["name"]
-    duplicate_check = query_db("SELECT name FROM forums WHERE name=%s", [name])
-    if duplicate_check:
-        return jsonify("Forum already exists"), "409 CONFLICT"
-    num
-    cursor.execute("INSERT INTO forums (name, creator) VALUES (%s,%s)", [name, request.authorization["username"]])
-    forum = cursor.lastrowid
-    db.commit()
+    forum_id = uuid.uuid4()
+    get_db().execute("INSERT INTO forums (id, name, creator) VALUES (%s,%s,%s)", [forum_id,name, request.authorization["username"]])
     response = jsonify()
     response.status_code = 201
-    response.headers['location'] = '/forums/%d' %(forum)
+    response.headers['location'] = '/forums/%s' %(forum_id)
     return response
 
-@app.route("/forums/<int:forum_id>", methods=['GET'])
+@app.route("/forums/<uuid:forum_id>", methods=['GET'])
 def view_threads(forum_id):
     #View the list of threads in a forum. Returns 200 OK and the resulting threads
     threads = list(query_db("SELECT id,title,creator,timestamp FROM threads WHERE forum=%s", [forum_id]))
@@ -130,10 +134,11 @@ def create_thread(forum_id):
     response.headers['location'] = '/forums/%d/%d' %(forum_id, thread_id)
     return response
 
-@app.route("/forums/<int:forum_id>/<int:thread_id>", methods=['GET'])
+@app.route("/forums/<uuid:forum_id>/<uuid:thread_id>", methods=['GET'])
 def view_posts(forum_id, thread_id):
     #Views posts in a thread on the forum
-    posts = query_db("SELECT author,text,timestamp FROM posts WHERE thread=? AND forum=?", [thread_id, forum_id])
+    posts = list((query_db("SELECT posts FROM threads WHERE id=%s AND forum=%s", [thread_id, forum_id], True))['posts'])
+    print(posts)
     if len(posts) < 1:
         return jsonify("Thread or forum does not exist"), "404 NOT FOUND"
     elif len(posts) > 1:
