@@ -6,7 +6,9 @@ curl -v -H "Content-Type:application/json" -X POST -d '{"text":"adam test mongod
 
 ----------------version with guids---------------------------------------
 curl -v -H "Content-Type:application/json" -X POST -d '{"name":"Cassandra"}' -u adam:apple http://127.0.0.1:5000/forums
-curl -v http://127.0.0.1:5000/forums/0efa6dd7-c1f3-4e17-832a-4e3471db849f
-curl -v http://127.0.0.1:5000/forums/0efa6dd7-c1f3-4e17-832a-4e3471db849f
+curl -v http://127.0.0.1:5000/forums/f2bb4843-0dc1-4e91-b9be-3a4d3c0e02fc
+curl -v -H "Content-Type:application/json" -X POST -d '{"title":"test cassandra forum post", "text":"test cassandra text"}' -u adam:apple http://127.0.0.1:5000/forums/d057d6df-26c7-475d-a0c7-e52eb6ebb527
+
+
 curl -v -H "Content-Type:application/json" -X POST -d '{"text":"adam test followup text"}' -u adam:apple http://127.0.0.1:5000/forums
 curl -v -H "Content-Type:application/json" -X POST -d '{"text":"adam test followup text"}' -u adam:apple http://127.0.0.1:5000/forums/3/204972913481120868907594661788859592267

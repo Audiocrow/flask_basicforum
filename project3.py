@@ -6,6 +6,7 @@ from cassandra.query import dict_factory
 import click
 from flask import Flask, g, jsonify, request
 from flask_basicauth import BasicAuth
+import time
 import uuid
 
 app = Flask(__name__)
@@ -14,18 +15,19 @@ app.config["DEBUG"] = True
 KEYSPACE = 'bbs'
 CLUSTER_IP = '172.17.0.2'
 
-class Post(dict):
+class post(dict):
     def __init__(self, author, text, timestamp):
         dict.__init__(self, author=author, text=text, timestamp=timestamp)
 
-def get_db(Keyspace=KEYSPACE):
+def get_db(UseKeyspace=True):
     db = getattr(g, '_database', None)
     if db is None:
         cluster = getattr(g, '_cluster', None)
         if cluster is None:
             cluster = g._cluster = Cluster([CLUSTER_IP])
-            cluster.register_user_type(Keyspace, 'post', Post)
-        db = g._database = cluster.connect(Keyspace)
+            cluster.register_user_type(KEYSPACE, 'post', post)
+        db = g._database = cluster.connect(KEYSPACE) if UseKeyspace else \
+            cluster.connect()
         db.row_factory = dict_factory
     return db
 
@@ -50,7 +52,7 @@ def init_db():
     #Adds a custom command to Flask to initialize the db
     #Only run this once to populate the default database
     with app.app_context():
-        db = get_db(None)
+        db = get_db(False)
         db.execute("DROP KEYSPACE IF EXISTS %s" %KEYSPACE)
         db.execute("CREATE KEYSPACE %s WITH replication = {'class':'SimpleStrategy', 'replication_factor' : '1' }" %KEYSPACE)
         db.execute("USE %s" %KEYSPACE)
@@ -106,42 +108,35 @@ def view_threads(forum_id):
         return jsonify("No threads found.")
     return jsonify(threads)
 
-@app.route("/forums/<int:forum_id>", methods=['POST'])
+@app.route("/forums/<uuid:forum_id>", methods=['POST'])
 @basic_auth.required
 def create_thread(forum_id):
-    #Posts a new thread to a forum
-    #Returns the new location header and 201 CREATED, 404 NOT FOUND, or
-    #400 BAD REQUEST if data was not provided
-    forum = query_db("SELECT name FROM forums WHERE id=?", [forum_id], True)
-    if not forum:
-        return jsonify("HTTP 404 NOT FOUND"), "404 NOT FOUND"
-    thread_id = query_db("SELECT COALESCE(MAX(id), 0) AS new_id FROM threads WHERE forum=?", [forum_id], True)['new_id']+1
+    #Posts a new thread to a forum and returns HTTP 201 Created, or HTTP 400 bad request
+    #Warning: does not ensure the forum exists
     input = request.get_json()
     if not input or 'title' not in input or 'text' not in input:
         return jsonify("Must provide title and text"), "400 BAD REQUEST"
     db = get_db()
-    cursor = db.cursor()
-    #Note: does not check for duplicates
     timestamp = time.strftime("%a, %d %b %Y %H:%M:%S %Z", time.gmtime())
-    cursor.execute("INSERT INTO threads (id,forum,title,creator,timestamp) \
-    VALUES(?,?,?,?,?)", [thread_id, forum_id, input['title'], request.authorization["username"], \
-        timestamp])
-    cursor.execute("INSERT INTO posts (thread,forum,author,text,timestamp) VALUES(?,?,?,?,?)", \
-        [thread_id, forum_id, request.authorization["username"], input["text"], timestamp])
-    db.commit()
+    thread_id = uuid.uuid4()
+    post_data = [post(request.authorization['username'], input['text'], timestamp)]
+    statement=db.prepare("INSERT INTO threads (id,forum,title,creator,timestamp,posts) \
+        VALUES (?,?,?,?,?,?)")
+    db.execute(statement, [thread_id, forum_id, input['title'], request.authorization['username'], \
+        timestamp, post_data])
     response = jsonify(input['text'])
     response.status_code = 201
-    response.headers['location'] = '/forums/%d/%d' %(forum_id, thread_id)
+    response.headers['location'] = '/forums/%s/%s' %(forum_id, thread_id)
     return response
 
 @app.route("/forums/<uuid:forum_id>/<uuid:thread_id>", methods=['GET'])
 def view_posts(forum_id, thread_id):
     #Views posts in a thread on the forum
-    posts = list((query_db("SELECT posts FROM threads WHERE id=%s AND forum=%s", [thread_id, forum_id], True))['posts'])
-    print(posts)
-    if len(posts) < 1:
+    posts = query_db("SELECT posts FROM threads WHERE id=%s AND forum=%s", [thread_id, forum_id], True)
+    if not posts:
         return jsonify("Thread or forum does not exist"), "404 NOT FOUND"
-    elif len(posts) > 1:
+    posts = posts["posts"]
+    if len(posts) > 1:
         posts.sort(key=lambda k: k["timestamp"])
     return jsonify(posts)
 
